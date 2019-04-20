@@ -1,0 +1,31 @@
+.input-race {
+    width: 95%;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.quote-typed {
+    background-color: green;
+}
+
+.quote-typed-wrong {
+    background-color: red;
+}
+
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.player-score {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  width: 100%;
+  font-size: 14px;
+}
+
+.finished {
+    text-align: center;
+}

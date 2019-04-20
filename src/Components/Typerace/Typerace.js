@@ -1,7 +1,11 @@
 import React, { Component } from 'react';
 import moment from 'moment';
-import io from 'socket.io-client';
 import './Typerace.css';
+
+const defaultValues = {
+  countdown: 10,
+  countdownRace: 105,
+};
 
 class Typerace extends Component {
   constructor(props) {
@@ -12,24 +16,26 @@ class Typerace extends Component {
       quoteTyped: '',
       wordCount: 0,
       wpm: 0,
-      countdown: 10,
-      countdownRace: 105,
       status: 'waiting',
+      ...defaultValues,
+      inputValue: '',
       disabled: true,
       timeUp: false,
       finished: false,
       profile: {},
-      players: {}
+      players: {},
+      winner: {},
     };
-
-    this.socket = io.connect('http://localhost:8081');
-
-    this.socket.on('connect', () => {
-      console.log('socket ');
-    });
+    this.socket = props.socket;
 
     this.socket.on('welcome', (player) => {
       this.setState({ profile: player });
+    });
+
+    this.socket.on('waiting-players', () => {
+      this.setState({ status: 'waiting' });
+      this.reset();
+      this.clearTyped();
     });
 
     this.socket.on('disconnect', () => {
@@ -45,7 +51,7 @@ class Typerace extends Component {
   }
 
   componentDidMount() {
-    const { players, finished } = this.state;
+    const { finished } = this.state;
 
     this.socket.on('start-race', () => {
       this.setState({ status: 'started' });
@@ -60,14 +66,23 @@ class Typerace extends Component {
       }, 1000);
     });
 
-    this.socket.on('current-score', (data) => {
-      const dataPlayers = JSON.stringify(data);
-      const dataCurrentPlayers = JSON.stringify(players);
+    this.socket.on('current-score', data => this.onCurrentScore(data));
 
-      if (dataPlayers !== dataCurrentPlayers) {
-        this.setState({ players: data });
-      }
+    this.socket.on('race-over', (data) => {
+      // this.reset();
+      this.setState({ status: 'race-over', winner: data });
     });
+  }
+
+  onCurrentScore(data) {
+    const { players } = this.state;
+
+    const dataPlayers = JSON.stringify(data);
+    const dataCurrentPlayers = JSON.stringify(players);
+
+    if (dataPlayers !== dataCurrentPlayers) {
+      this.setState({ players: data });
+    }
   }
 
   onKeyDown(e) {
@@ -98,6 +113,7 @@ class Typerace extends Component {
 
     if (quoteIndex === quote.length - 1) {
       this.setState({ finished: true });
+      this.socket.emit('player-finished');
     }
 
     if (char === ' ') {
@@ -114,6 +130,17 @@ class Typerace extends Component {
         wpm: Math.round(wordCount / (countdownRace / 60))
       });
     }
+  }
+
+  reset() {
+    this.clearTyped();
+    this.setState({
+      countdown: defaultValues.countdown,
+      countdownRace: defaultValues.countdownRace,
+      disabled: true,
+      wpm: 0,
+      wordCount: 0,
+    });
   }
 
   emitPlayerStatus() {
@@ -148,14 +175,21 @@ class Typerace extends Component {
     }, 1000);
   }
 
+  clearTyped() {
+    this.setState({
+      inputValue: '',
+      quoteTyped: '',
+      amountWrongChars: 0
+    });
+  }
+
   handleChange(ev) {
     const { value } = ev.target;
 
     if (!value) {
-      this.setState({
-        quoteTyped: '',
-        amountWrongChars: 0
-      });
+      this.clearTyped();
+    } else {
+      this.setState({ inputValue: value });
     }
   }
 
@@ -210,7 +244,10 @@ class Typerace extends Component {
 
       return (
         <div className="player-score" key={key}>
-          <div>{profile.name === player.name ? 'You' : player.name}</div>
+          <div>
+            {profile.name === player.name ? 'You' : player.name}
+            {player.finished ? '(finished)' : ''}
+          </div>
           <div>{`${player.wpm} wpm`}</div>
         </div>
       );
@@ -218,20 +255,32 @@ class Typerace extends Component {
   }
 
   _finished() {
-    const { timeUp, finished } = this.state;
+    const {
+      timeUp, status, profile, winner
+    } = this.state;
 
-    if (!finished || !timeUp) return false;
+    if (status === 'race-over') {
+      return (
+        <div className="finished">
+          {profile.id === winner.id ? 'You won!' : `Player ${winner.name} won!`}
+        </div>
+      );
+    }
+
+    if (!timeUp) return false;
 
     return (
       <div className="finished">
-        <h3>{timeUp ? 'Time is up!' : 'You finished!'}</h3>
+        <h3>Time is up!</h3>
       </div>
     );
   }
 
   render() {
     const { quote } = this.props;
-    const { disabled, status, finished } = this.state;
+    const {
+      disabled, status, finished, inputValue
+    } = this.state;
 
     const Countdown = () => this._countdown();
     const StatusBar = () => this._statusBar();
@@ -249,6 +298,7 @@ class Typerace extends Component {
 
         <input
           ref={(ref) => { this.input = ref; }}
+          value={inputValue}
           className="input-race"
           onKeyDown={e => this.onKeyDown(e)}
           onKeyPress={e => this.onKeyPress(e)}

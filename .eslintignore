@@ -2,5 +2,4 @@
 /config/
 /dist/
 /*.js
-/tests/unit/coverage/
-/coverage
+serviceWorker.js
